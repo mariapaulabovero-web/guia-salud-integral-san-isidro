@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guía Geográfica Ampliada e Interactiva de Salud - San Isidro</title>
+    <!-- Leaflet CSS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <style>
+        :root {
+            --primary: #2b6cb0;
+            --primary-dark: #2c5282;
+            --municipal: #3182ce;
+            --caps: #319795;
+            --provincial: #dd6b20;
+            --national: #e53e3e;
+            --bg: #f7fafc;
+            --card-bg: #ffffff;
+            --text: #2d3748;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            background-color: var(--primary-dark);
+            color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        header h1 {
+            font-size: 1.4rem;
+            margin-bottom: 5px;
+        }
+
+        header p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 74px);
+            position: relative;
+        }
+
+        .sidebar {
+            width: 400px;
+            background: var(--card-bg);
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+            overflow-y: auto;
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #map {
+            flex: 1;
+            height: 100%;
+        }
+
+        .filter-tabs {
+            display: flex;
+            background: #edf2f7;
+            padding: 10px;
+            gap: 5px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .filter-btn {
+            flex: 1;
+            padding: 8px 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: white;
+            color: var(--text);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+
+        .filter-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .item-list {
+            padding: 10px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border-left: 5px solid #cbd5e0;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .card.active-card {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(49, 130, 206, 0.2);
+            background-color: #f7fafc;
+        }
+
+        .card.mun-hosp { border-left-color: var(--municipal); }
+        .card.mun-caps { border-left-color: var(--caps); }
+        .card.prov-inst { border-left-color: var(--provincial); }
+        .card.nac-inst { border-left-color: var(--national); }
+
+        .card-type {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        
+        .mun-hosp .card-type { color: var(--municipal); }
+        .mun-caps .card-type { color: var(--caps); }
+        .prov-inst .card-type { color: var(--provincial); }
+        .nac-inst .card-type { color: var(--national); }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .card-desc {
+            font-size: 0.85rem;
+            color: #4a5568;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+
+        .card-meta {
+            font-size: 0.8rem;
+            color: #718096;
+        }
+
+        .gps-btn {
+            display: inline-block;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .gps-btn:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column-reverse;
+            }
+            .sidebar {
+                width: 100%;
+                height: 50%;
+            }
+            #map {
+                height: 50%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Guía Geográfica Integral de Salud - San Isidro</h1>
+        <p>Efectores Municipales (Hospitales y CAPS), Provinciales y Nacionales coordinados en el territorio.</p>
+    </header>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="filter-tabs">
+                <button class="filter-btn active" onclick="filterItems('all')">Todos</button>
+                <button class="filter-btn" onclick="filterItems('mun-hosp')">Hospitales Mun.</button>
+                <button class="filter-btn" onclick="filterItems('mun-caps')">CAPS</button>
+                <button class="filter-btn" onclick="filterItems('prov-inst')">Provincial</button>
+                <button class="filter-btn" onclick="filterItems('nac-inst')">Nacional</button>
+            </div>
+            <div class="item-list" id="list">
+                <!-- Cards will be dynamically inserted here -->
+            </div>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+        // Data containing all health providers
+        const healthData = [
+            {
+                id: 1,
+                name: "Hospital Municipal Central de San Isidro Dr. Melchor Á. Posse",
+                type: "mun-hosp",
+                typeName: "Hospital Municipal (Alta Complejidad)",
+                desc: "Atención general de adultos, internación, cirugías y guardias médicas de alta complejidad.",
+                address: "Av. Santa Fe 431, San Isidro",
+                coords: [-34.4746, -58.5255]
+            },
+            {
+                id: 2,
+                name: "Hospital Municipal Materno Infantil de San Isidro",
+                type: "mun-hosp",
+                typeName: "Hospital Municipal (Especializado)",
+                desc: "Centro de referencia regional en obstetricia, neonatología, pediatría y ginecología.",
+                address: "Diego Palma 505, San Isidro",
+                coords: [-34.4695, -58.5303]
+            },
+            {
+                id: 3,
+                name: "Hospital Municipal Ciudad de Boulogne",
+                type: "mun-hosp",
+                typeName: "Hospital Municipal (General)",
+                desc: "Efector general descentralizado con guardia las 24 horas y consultorios externos clínicos.",
+                address: "Av. Avelino Rolón 1200, Boulogne",
+                coords: [-34.4925, -58.5630]
+            },
+            {
+                id: 4,
+                name: "Hospital Odontológico Municipal de San Isidro",
+                type: "mun-hosp",
+                typeName: "Hospital Municipal (Especializado)",
+                desc: "Consultorios externos programados y servicio integral de urgencias dentales 24hs.",
+                address: "Av. Santa Fe 487, Acassuso",
+                coords: [-34.4755, -58.5242]
+            },
+            {
+                id: 5,
+                name: "CAPS Martínez",
+                type: "mun-caps",
+                typeName: "Centro de Atención Primaria",
+                desc: "Primer nivel de atención, enfermería, vacunación y especialidades básicas (clínica, pediatría).",
+                address: "Sáenz Valiente 2110, Martínez",
+                coords: [-34.4975, -58.5210]
+            },
+            {
+                id: 6,
+                name: "CAPS Diagonal Salta",
+                type: "mun-caps",
+                typeName: "Centro de Atención Primaria",
+                desc: "Prevención, control de niño sano, entrega de medicamentos esenciales y atención primaria comunitaria.",
+                address: "Fray Luis Beltrán 1110, Martínez",
+                coords: [-34.4890, -58.5135]
+            },
+            {
+                id: 7,
+                name: "CAPS Villa Adelina",
+                type: "mun-caps",
+                typeName: "Centro de Atención Primaria",
+                desc: "Atención médica básica ambulatoria e integración con programas sociales y barriales del municipio.",
+                address: "Av. de Mayo 1397, Villa Adelina",
+                coords: [-34.5218, -58.5524]
+            },
+            {
+                id: 8,
+                name: "CAPS Beccar",
+                type: "mun-caps",
+                typeName: "Centro de Atención Primaria",
+                desc: "Red territorial básica. Control obstétrico, pediatría, clínica médica y talleres comunitarios.",
+                address: "Bergallo y Tomkinson, Beccar",
+                coords: [-34.4645, -58.5440]
+            },
+            {
+                id: 9,
+                name: "CAPS Barrio Obrero",
+                type: "mun-caps",
+                typeName: "Centro de Atención Primaria",
+                desc: "Infraestructura sanitaria de base para la contención epidemiológica y social en el área de Boulogne.",
+                address: "Aráoz y Guayaquil, Boulogne",
+                coords: [-34.5015, -58.5722]
+            },
+            {
+                id: 10,
+                name: "Salita La Ribera",
+                type: "mun-caps",
+                typeName: "Centro de Atención Primaria",
+                desc: "Puesto sanitario de nivel primario enfocado en la cobertura del área costera del bajo de San Isidro.",
+                address: "Cnel. Rosales 1194, San Isidro",
+                coords: [-34.4658, -58.5065]
+            },
+            {
+                id: 11,
+                name: "Centro de Desarrollo Infantil y Estimulación Temprana 'El Nido'",
+                type: "mun-hosp",
+                typeName: "Centro Municipal Especializado",
+                desc: "Unidad multidisciplinaria municipal abocada al neurodesarrollo y la estimulación de la primera infancia.",
+                address: "Av. Centenario 1891, Beccar",
+                coords: [-34.4650, -58.5360]
+            },
+            {
+                id: 12,
+                name: "Sede Sanitaria Región V (Provincia de Bs. As.)",
+                type: "prov-inst",
+                typeName: "Dependencia Provincial",
+                desc: "Sede de la Jefatura Sanitaria Regional. Gestión regulatoria, epidemiología y matriculaciones del Ministerio de Salud provincial.",
+                address: "Acassuso 715, San Isidro",
+                coords: [-34.4718, -58.5222]
+            },
+            {
+                id: 13,
+                name: "HIGA Petrona V. de Cordero (Efector Regional)",
+                type: "prov-inst",
+                typeName: "Hospital Interzonal Provincial",
+                desc: "Hospital Interzonal General de Agudos. Actúa históricamente como el nodo provincial de derivación crítica de tercer nivel.",
+                address: "Belgrano 1955, San Fernando",
+                coords: [-34.4485, -58.5385]
+            },
+            {
+                id: 14,
+                name: "UDAI ANSES San Isidro (Articulación Nacional)",
+                type: "nac-inst",
+                typeName: "Organismo Nacional",
+                desc: "Tramitaciones de cobertura pública complementaria, asignación por embarazo, programas de discapacidad y el Programa federal SUMAR.",
+                address: "Av. Centenario 821, San Isidro",
+                coords: [-34.4710, -58.5280]
+            }
+        ];
+
+        // Colors mapped to types
+        const typeColors = {
+            "mun-hosp": "#3182ce",
+            "mun-caps": "#319795",
+            "prov-inst": "#dd6b20",
+            "nac-inst": "#e53e3e"
+        };
+
+        // Initialize Map
+        const map = L.map('map').setView([-34.485, -58.535], 13);
+
+        // Load OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        const markers = {};
+        const cardsMap = {};
+
+        // Function to render items
+        function renderUI() {
+            const listContainer = document.getElementById('list');
+            listContainer.innerHTML = '';
+
+            healthData.forEach(item => {
+                // 1. Create Map Marker
+                const markerHtmlStyles = `
+                    background-color: ${typeColors[item.type]};
+                    width: 24px;
+                    height: 24px;
+                    display: block;
+                    border-radius: 50% 50% 50% 0;
+                    transform: rotate(-45deg);
+                    border: 2px solid white;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                `;
+                
+                const customIcon = L.divIcon({
+                    className: "custom-pin",
+                    iconAnchor: [12, 24],
+                    popupAnchor: [0, -26],
+                    html: `<span style="${markerHtmlStyles}" />`
+                });
+
+                const marker = L.marker(item.coords, { icon: customIcon })
+                    .bindPopup(`<b>${item.name}</b><br><small>${item.typeName}</small><br><br>${item.address}`)
+                    .addTo(map);
+                
+                markers[item.id] = marker;
+
+                // Marker click opens active state on card
+                marker.on('click', () => {
+                    highlightCard(item.id, false);
+                });
+
+                // 2. Create Card Layout
+                const card = document.createElement('div');
+                card.className = `card ${item.type}`;
+                card.id = `card-${item.id}`;
+                card.innerHTML = `
+                    <div class="card-type">${item.typeName}</div>
+                    <div class="card-title">${item.name}</div>
+                    <div class="card-desc">${item.desc}</div>
+                    <div class="card-meta">📍 ${item.address}</div>
+                    <a class="gps-btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.name + ' ' + item.address)}" target="_blank">Navegar vía GPS →</a>
+                `;
+
+                card.addEventListener('click', (e) => {
+                    // Prevent triggering if clicking the outbound link
+                    if(e.target.tagName !== 'A') {
+                        highlightCard(item.id, true);
+                    }
+                });
+
+                listContainer.appendChild(card);
+                cardsMap[item.id] = card;
+            });
+        }
+
+        function highlightCard(id, moveMap) {
+            // Remove previous active classes
+            document.querySelectorAll('.card').forEach(c => c.classList.remove('active-card'));
+            
+            const card = cardsMap[id];
+            const marker = markers[id];
+
+            if(card) {
+                card.classList.add('active-card');
+                card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            if(marker) {
+                marker.openPopup();
+                if(moveMap) {
+                    map.setView(marker.getLatLng(), 15, { animate: true, duration: 0.5 });
+                }
+            }
+        }
+
+        // Filter Logic
+        function filterItems(type) {
+            // Update tabs
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            healthData.forEach(item => {
+                const card = cardsMap[item.id];
+                const marker = markers[item.id];
+
+                if(type === 'all' || item.type === type) {
+                    card.style.display = 'block';
+                    map.addLayer(marker);
+                } else {
+                    card.style.display = 'none';
+                    map.removeLayer(marker);
+                }
+            });
+
+            // Adjust view bounds based on remaining markers
+            const activeMarkers = [];
+            healthData.forEach(item => {
+                if(type === 'all' || item.type === type) {
+                    activeMarkers.push(item.coords);
+                }
+            });
+            if(activeMarkers.length > 0) {
+                map.fitBounds(activeMarkers, { padding: [30, 30] });
+            }
+        }
+
+        // Initialization
+        renderUI();
+    </script>
+</body>
+</html>
